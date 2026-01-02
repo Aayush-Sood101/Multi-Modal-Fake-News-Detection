@@ -3,31 +3,46 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Volume2, AlertTriangle, FileAudio, Users } from 'lucide-react';
+import { Volume2, AlertTriangle, FileAudio, Activity, Signal } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 interface AudioAnalysis {
   audioUrl?: string;
   transcription?: string;
-  confidence?: number;
+  transcriptionConfidence?: number;
+  transcriptionLanguage?: string;
+  transcriptionSegments?: Array<{
+    start: number;
+    end: number;
+    text: string;
+    confidence?: number;
+  }>;
+  audioInfo?: {
+    duration: number;
+    sample_rate: number;
+    channels: number;
+    bit_rate?: number;
+    codec?: string;
+  };
+  quality?: {
+    snrDb: number;
+    dynamicRangeDb: number;
+    clippingPercentage: number;
+    hasSignificantClipping: boolean;
+  };
+  silenceSegments?: Array<{
+    start: number;
+    end: number;
+    duration: number;
+  }>;
   deepfakeScore?: number;
   deepfakeDetails?: {
     authenticityScore: number;
     spectralAnomalies: number;
     artifacts: number;
+    confidence?: number;
   };
-  segments?: Array<{
-    start: number;
-    end: number;
-    text: string;
-    confidence: number;
-    suspicious: boolean;
-  }>;
-  speakers?: Array<{
-    id: string;
-    duration: number;
-    percentage: number;
-  }>;
+  features?: Record<string, number>;
 }
 
 interface AudioAnalysisPanelProps {
@@ -40,15 +55,18 @@ export function AudioAnalysisPanel({ data }: AudioAnalysisPanelProps) {
   const {
     audioUrl,
     transcription = 'No transcription available',
-    confidence = 0,
+    transcriptionConfidence = 0,
+    transcriptionLanguage,
+    transcriptionSegments = [],
+    audioInfo,
+    quality,
+    silenceSegments = [],
     deepfakeScore = 0,
     deepfakeDetails = {
       authenticityScore: 85,
       spectralAnomalies: 12,
       artifacts: 8
-    },
-    segments = [],
-    speakers = []
+    }
   } = data;
 
   useEffect(() => {
@@ -68,8 +86,47 @@ export function AudioAnalysisPanel({ data }: AudioAnalysisPanelProps) {
 
   const deepfakeLevel = getDeepfakeLevel(deepfakeScore);
 
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="space-y-6">
+      {/* Audio Info */}
+      {audioInfo && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileAudio className="h-5 w-5" />
+              Audio Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-3 border rounded-lg">
+                <div className="text-2xl font-bold">{formatDuration(audioInfo.duration)}</div>
+                <div className="text-xs text-muted-foreground">Duration</div>
+              </div>
+              <div className="text-center p-3 border rounded-lg">
+                <div className="text-2xl font-bold">{(audioInfo.sample_rate / 1000).toFixed(0)}kHz</div>
+                <div className="text-xs text-muted-foreground">Sample Rate</div>
+              </div>
+              <div className="text-center p-3 border rounded-lg">
+                <div className="text-2xl font-bold">{audioInfo.channels}</div>
+                <div className="text-xs text-muted-foreground">Channels</div>
+              </div>
+              {audioInfo.codec && (
+                <div className="text-center p-3 border rounded-lg">
+                  <div className="text-lg font-bold uppercase">{audioInfo.codec}</div>
+                  <div className="text-xs text-muted-foreground">Codec</div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {/* Waveform Visualization */}
       <Card>
         <CardHeader>
@@ -121,7 +178,7 @@ export function AudioAnalysisPanel({ data }: AudioAnalysisPanelProps) {
             <div className="space-y-4">
               <div className={`text-center p-4 rounded-lg ${deepfakeLevel.bg} dark:bg-opacity-20`}>
                 <div className={`text-3xl font-bold ${deepfakeLevel.color}`}>
-                  {deepfakeScore}%
+                  {deepfakeScore.toFixed(1)}%
                 </div>
                 <div className="text-sm font-medium mt-1">
                   {deepfakeLevel.label}
@@ -132,21 +189,21 @@ export function AudioAnalysisPanel({ data }: AudioAnalysisPanelProps) {
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Authenticity Score</span>
-                    <span className="font-medium">{deepfakeDetails.authenticityScore}%</span>
+                    <span className="font-medium">{deepfakeDetails.authenticityScore.toFixed(1)}%</span>
                   </div>
                   <Progress value={deepfakeDetails.authenticityScore} className="h-2" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Spectral Anomalies</span>
-                    <span className="font-medium">{deepfakeDetails.spectralAnomalies}%</span>
+                    <span className="font-medium">{deepfakeDetails.spectralAnomalies.toFixed(1)}%</span>
                   </div>
                   <Progress value={deepfakeDetails.spectralAnomalies} className="h-2" />
                 </div>
                 <div>
                   <div className="flex justify-between text-sm mb-1">
                     <span>Artifacts Detected</span>
-                    <span className="font-medium">{deepfakeDetails.artifacts}%</span>
+                    <span className="font-medium">{deepfakeDetails.artifacts.toFixed(1)}%</span>
                   </div>
                   <Progress value={deepfakeDetails.artifacts} className="h-2" />
                 </div>
@@ -155,50 +212,65 @@ export function AudioAnalysisPanel({ data }: AudioAnalysisPanelProps) {
           </CardContent>
         </Card>
 
-        {/* Transcription Quality */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Transcription Quality</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="text-center">
-                <div className="text-4xl font-bold text-primary">
-                  {confidence}%
-                </div>
-                <div className="text-sm text-muted-foreground mt-1">
-                  Overall Confidence
-                </div>
-              </div>
-              <Progress value={confidence} className="h-2" />
-              {speakers.length > 0 && (
-                <div className="pt-4 border-t">
-                  <div className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Users className="h-4 w-4" />
-                    Speakers Detected: {speakers.length}
+        {/* Audio Quality */}
+        {quality && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Signal className="h-5 w-5" />
+                Audio Quality
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Signal-to-Noise Ratio</span>
+                    <span className="font-medium">{quality.snrDb.toFixed(1)} dB</span>
                   </div>
-                  {speakers.map((speaker) => (
-                    <div key={speaker.id} className="text-xs text-muted-foreground mb-1">
-                      {speaker.id}: {speaker.percentage}% of audio
-                    </div>
-                  ))}
+                  <Progress value={Math.min(100, (quality.snrDb / 40) * 100)} className="h-2" />
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Dynamic Range</span>
+                    <span className="font-medium">{quality.dynamicRangeDb.toFixed(1)} dB</span>
+                  </div>
+                  <Progress value={Math.min(100, (quality.dynamicRangeDb / 96) * 100)} className="h-2" />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Clipping</span>
+                    <span className="font-medium">{quality.clippingPercentage.toFixed(2)}%</span>
+                  </div>
+                  <Progress value={Math.min(100, quality.clippingPercentage * 10)} className="h-2" />
+                </div>
+                {quality.hasSignificantClipping && (
+                  <Badge variant="destructive" className="w-full justify-center">
+                    <AlertTriangle className="h-3 w-3 mr-1" />
+                    Significant Clipping Detected
+                  </Badge>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* Transcription */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Transcription
-            {confidence > 0 && (
-              <Badge variant="outline">
-                {confidence}% confidence
-              </Badge>
-            )}
+          <CardTitle className="flex items-center gap-2 justify-between">
+            <span>Transcription</span>
+            <div className="flex gap-2">
+              {transcriptionLanguage && (
+                <Badge variant="outline">{transcriptionLanguage.toUpperCase()}</Badge>
+              )}
+              {transcriptionConfidence > 0 && (
+                <Badge variant="outline">
+                  {(transcriptionConfidence * 100).toFixed(0)}% confidence
+                </Badge>
+              )}
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -210,28 +282,61 @@ export function AudioAnalysisPanel({ data }: AudioAnalysisPanelProps) {
         </CardContent>
       </Card>
 
-      {/* Suspicious Segments */}
-      {segments.length > 0 && (
+      {/* Silence Segments */}
+      {silenceSegments.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-              Suspicious Audio Segments
+              <Activity className="h-5 w-5" />
+              Silence Segments ({silenceSegments.length})
             </CardTitle>
+            <CardDescription>
+              Periods of silence detected in the audio
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {silenceSegments.map((segment, idx) => (
+                <div key={idx} className="flex justify-between items-center p-2 border rounded text-sm">
+                  <span className="text-muted-foreground">
+                    {segment.start.toFixed(2)}s - {segment.end.toFixed(2)}s
+                  </span>
+                  <Badge variant="outline">
+                    {segment.duration.toFixed(2)}s
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Transcription Segments */}
+      {transcriptionSegments.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              Transcription Segments
+            </CardTitle>
+            <CardDescription>
+              Time-aligned transcription segments
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {segments.filter(s => s.suspicious).map((segment, idx) => (
-                <div key={idx} className="p-3 border border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20 rounded-lg">
+              {transcriptionSegments.map((segment, idx) => (
+                <div key={idx} className="p-3 border rounded-lg">
                   <div className="flex justify-between items-start mb-2">
                     <span className="text-xs text-muted-foreground">
                       {segment.start.toFixed(1)}s - {segment.end.toFixed(1)}s
                     </span>
-                    <Badge variant="outline" className="text-amber-700 border-amber-300">
-                      {segment.confidence}% confidence
-                    </Badge>
+                    {segment.confidence !== undefined && (
+                      <Badge variant="outline">
+                        {(segment.confidence * 100).toFixed(0)}% confidence
+                      </Badge>
+                    )}
                   </div>
-                  <div className="text-sm">&quot;{segment.text}&quot;</div>
+                  <div className="text-sm">{segment.text}</div>
                 </div>
               ))}
             </div>

@@ -3,36 +3,45 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { Video, AlertTriangle, Eye, Clock, Activity } from 'lucide-react';
+import { Video, AlertTriangle, Eye, Clock, Activity, Film } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
 interface VideoAnalysis {
   videoUrl?: string;
-  deepfakeScore?: number;
+  videoInfo?: {
+    duration: number;
+    width: number;
+    height: number;
+    fps: number;
+    frame_count?: number;
+    bit_rate?: number;
+    codec?: string;
+    format?: string;
+  };
+  framesAnalyzed?: number;
   facesDetected?: number;
-  frameAnalysis?: Array<{
-    timestamp: number;
-    deepfakeScore: number;
-    facesDetected: number;
-    manipulation: string;
+  faceFrames?: Array<{
+    frame_index: number;
+    face_count: number;
+    face_locations?: Array<[number, number, number, number]>;
   }>;
+  sceneChanges?: number[];
+  sceneChangeCount?: number;
+  qualityMetrics?: {
+    sharpness: number;
+    brightness: number;
+    contrast: number;
+    noise: number;
+  };
+  manipulationIndicators?: string[];
+  deepfakeScore?: number;
+  deepfakeDetails?: Record<string, unknown>;
   temporalConsistency?: {
     score: number;
     anomalies: number;
     smoothness: number;
   };
-  manipulationIndicators?: {
-    faceInconsistency: number;
-    edgeArtifacts: number;
-    compressionAnomalies: number;
-    lightingIssues: number;
-  };
-  sceneBreakdown?: Array<{
-    start: number;
-    end: number;
-    description: string;
-    suspicious: boolean;
-  }>;
+  metadata?: Record<string, unknown>;
 }
 
 interface VideoAnalysisPanelProps {
@@ -44,21 +53,20 @@ export function VideoAnalysisPanel({ data }: VideoAnalysisPanelProps) {
   
   const {
     videoUrl,
-    deepfakeScore = 0,
+    videoInfo,
+    framesAnalyzed = 0,
     facesDetected = 0,
-    frameAnalysis = [],
+    faceFrames = [],
+    sceneChanges = [],
+    sceneChangeCount = 0,
+    qualityMetrics,
+    manipulationIndicators = [],
+    deepfakeScore = 0,
     temporalConsistency = {
       score: 78,
-      anomalies: 3,
+      anomalies: 0,
       smoothness: 85
-    },
-    manipulationIndicators = {
-      faceInconsistency: 15,
-      edgeArtifacts: 22,
-      compressionAnomalies: 8,
-      lightingIssues: 12
-    },
-    sceneBreakdown = []
+    }
   } = data;
 
   useEffect(() => {
@@ -77,8 +85,47 @@ export function VideoAnalysisPanel({ data }: VideoAnalysisPanelProps) {
 
   const deepfakeLevel = getDeepfakeLevel(deepfakeScore);
 
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
     <div className="space-y-6">
+      {/* Video Info */}
+      {videoInfo && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Film className="h-5 w-5" />
+              Video Information
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center p-3 border rounded-lg">
+                <div className="text-2xl font-bold">{formatDuration(videoInfo.duration)}</div>
+                <div className="text-xs text-muted-foreground">Duration</div>
+              </div>
+              <div className="text-center p-3 border rounded-lg">
+                <div className="text-2xl font-bold">{videoInfo.width}×{videoInfo.height}</div>
+                <div className="text-xs text-muted-foreground">Resolution</div>
+              </div>
+              <div className="text-center p-3 border rounded-lg">
+                <div className="text-2xl font-bold">{videoInfo.fps.toFixed(0)}</div>
+                <div className="text-xs text-muted-foreground">FPS</div>
+              </div>
+              {videoInfo.codec && (
+                <div className="text-center p-3 border rounded-lg">
+                  <div className="text-lg font-bold uppercase">{videoInfo.codec}</div>
+                  <div className="text-xs text-muted-foreground">Codec</div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       {/* Video Player */}
       <Card>
         <CardHeader>
@@ -103,31 +150,6 @@ export function VideoAnalysisPanel({ data }: VideoAnalysisPanelProps) {
                 {!videoUrl && <p className="text-xs mt-1">No video URL provided</p>}
               </div>
             </div>
-            
-            {/* Timeline with deepfake scores */}
-            {frameAnalysis.length > 0 && (
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Frame-by-Frame Analysis</div>
-                <div className="h-16 bg-muted rounded flex items-end gap-px overflow-hidden">
-                  {frameAnalysis.map((frame, idx) => (
-                    <div
-                      key={idx}
-                      className="flex-1 transition-all hover:opacity-80 cursor-pointer"
-                      style={{
-                        height: `${frame.deepfakeScore}%`,
-                        backgroundColor: frame.deepfakeScore > 70 ? '#ef4444' : frame.deepfakeScore > 40 ? '#eab308' : '#22c55e'
-                      }}
-                      title={`${frame.timestamp}s: ${frame.deepfakeScore}% suspicious`}
-                    />
-                  ))}
-                </div>
-                <div className="flex justify-between text-xs text-muted-foreground">
-                  <span>Start</span>
-                  <span>Timeline</span>
-                  <span>End</span>
-                </div>
-              </div>
-            )}
           </div>
         </CardContent>
       </Card>
@@ -141,7 +163,7 @@ export function VideoAnalysisPanel({ data }: VideoAnalysisPanelProps) {
           <CardContent>
             <div className={`text-center p-4 rounded-lg ${deepfakeLevel.bg} dark:bg-opacity-20`}>
               <div className={`text-4xl font-bold ${deepfakeLevel.color}`}>
-                {deepfakeScore}%
+                {deepfakeScore.toFixed(1)}%
               </div>
               <div className="text-sm font-medium mt-1">
                 {deepfakeLevel.label}
@@ -169,14 +191,14 @@ export function VideoAnalysisPanel({ data }: VideoAnalysisPanelProps) {
               <div>
                 <div className="flex justify-between text-sm mb-1">
                   <span>Consistency Score</span>
-                  <span className="font-medium">{temporalConsistency.score}%</span>
+                  <span className="font-medium">{temporalConsistency.score.toFixed(0)}%</span>
                 </div>
                 <Progress value={temporalConsistency.score} className="h-2" />
               </div>
               <div>
                 <div className="flex justify-between text-sm mb-1">
                   <span>Motion Smoothness</span>
-                  <span className="font-medium">{temporalConsistency.smoothness}%</span>
+                  <span className="font-medium">{temporalConsistency.smoothness.toFixed(0)}%</span>
                 </div>
                 <Progress value={temporalConsistency.smoothness} className="h-2" />
               </div>
@@ -188,66 +210,151 @@ export function VideoAnalysisPanel({ data }: VideoAnalysisPanelProps) {
           </CardContent>
         </Card>
 
-        {/* Manipulation Indicators */}
+        {/* Analysis Statistics */}
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center gap-2">
               <Activity className="h-5 w-5" />
-              Indicators
+              Analysis Stats
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-2 text-sm">
-              {Object.entries(manipulationIndicators).map(([key, value]) => (
-                <div key={key} className="flex justify-between items-center">
-                  <span className="text-muted-foreground capitalize">
-                    {key.replace(/([A-Z])/g, ' $1').trim()}
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Frames Analyzed</span>
+                <Badge variant="outline">{framesAnalyzed}</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Face Frames</span>
+                <Badge variant="outline">{faceFrames.length}</Badge>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Scene Changes</span>
+                <Badge variant="outline">{sceneChangeCount || sceneChanges.length}</Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Quality Metrics */}
+      {qualityMetrics && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Video Quality Metrics</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Sharpness</span>
+                    <span className="font-medium">{qualityMetrics.sharpness.toFixed(1)}</span>
+                  </div>
+                  <Progress value={Math.min(100, qualityMetrics.sharpness / 10)} className="h-2" />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Brightness</span>
+                    <span className="font-medium">{qualityMetrics.brightness.toFixed(1)}</span>
+                  </div>
+                  <Progress value={Math.min(100, (qualityMetrics.brightness / 255) * 100)} className="h-2" />
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Contrast</span>
+                    <span className="font-medium">{qualityMetrics.contrast.toFixed(1)}</span>
+                  </div>
+                  <Progress value={Math.min(100, (qualityMetrics.contrast / 128) * 100)} className="h-2" />
+                </div>
+                <div>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span>Noise Level</span>
+                    <span className="font-medium">{qualityMetrics.noise.toFixed(1)}</span>
+                  </div>
+                  <Progress value={Math.min(100, (qualityMetrics.noise / 50) * 100)} className="h-2" />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Manipulation Indicators */}
+      {manipulationIndicators.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-900 dark:text-amber-100">
+              <AlertTriangle className="h-5 w-5" />
+              Manipulation Indicators Detected
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex flex-wrap gap-2">
+              {manipulationIndicators.map((indicator, idx) => (
+                <Badge key={idx} variant="outline" className="border-amber-300 text-amber-900 dark:text-amber-100">
+                  {indicator}
+                </Badge>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Face Detection Details */}
+      {faceFrames.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              Face Detection Details
+            </CardTitle>
+            <CardDescription>
+              Frames with detected faces
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {faceFrames.map((frame, idx) => (
+                <div key={idx} className="flex justify-between items-center p-2 border rounded text-sm">
+                  <span className="text-muted-foreground">
+                    Frame {frame.frame_index}
                   </span>
-                  <Badge 
-                    variant={value > 50 ? 'destructive' : value > 25 ? 'secondary' : 'outline'}
-                  >
-                    {value}%
+                  <Badge variant="outline">
+                    {frame.face_count} {frame.face_count === 1 ? 'face' : 'faces'}
                   </Badge>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
-      </div>
+      )}
 
-      {/* Scene Breakdown */}
-      {sceneBreakdown.length > 0 && (
+      {/* Scene Changes */}
+      {sceneChanges.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              Scene-by-Scene Analysis
+              Scene Changes Detected
             </CardTitle>
+            <CardDescription>
+              Frame indices where scene changes occur
+            </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-3">
-              {sceneBreakdown.map((scene, idx) => (
-                <div 
-                  key={idx} 
-                  className={`p-3 rounded-lg border ${
-                    scene.suspicious 
-                      ? 'border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20' 
-                      : 'bg-card'
-                  }`}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <span className="text-xs text-muted-foreground">
-                      {scene.start.toFixed(1)}s - {scene.end.toFixed(1)}s
-                    </span>
-                    {scene.suspicious && (
-                      <Badge variant="outline" className="text-amber-700 border-amber-300">
-                        <AlertTriangle className="h-3 w-3 mr-1" />
-                        Suspicious
-                      </Badge>
-                    )}
-                  </div>
-                  <div className="text-sm">{scene.description}</div>
-                </div>
+            <div className="flex flex-wrap gap-2">
+              {sceneChanges.slice(0, 20).map((frameIdx, idx) => (
+                <Badge key={idx} variant="secondary">
+                  Frame {frameIdx}
+                </Badge>
               ))}
+              {sceneChanges.length > 20 && (
+                <Badge variant="outline">
+                  +{sceneChanges.length - 20} more
+                </Badge>
+              )}
             </div>
           </CardContent>
         </Card>

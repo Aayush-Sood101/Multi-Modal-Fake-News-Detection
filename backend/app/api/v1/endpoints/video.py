@@ -78,9 +78,30 @@ async def process_video_analysis(analysis_id: str, file_path: str, file_name: st
             }
         )
         
+        # Store in consistent format with text/audio endpoints
         analysis_store[analysis_id] = {
             'status': AnalysisStatus.COMPLETED,
-            'result': result,
+            'completed_at': datetime.now(),
+            'credibility_score': score,
+            'confidence': confidence,
+            'result_data': {
+                'video_info': video_info,
+                'frames_analyzed': analysis_data['frames_analyzed'],
+                'faces_detected': analysis_data['faces_detected'],
+                'face_frames': analysis_data['face_frames'],
+                'scene_changes': analysis_data['scene_changes'],
+                'scene_change_count': analysis_data['scene_change_count'],
+                'quality_metrics': analysis_data['quality_metrics'],
+                'manipulation_indicators': manipulation_indicators,
+                'deepfake_detection': {
+                    'score': 100 - score,  # Inverse of credibility
+                },
+                'temporal_analysis': None,  # Placeholder
+                'metadata': {
+                    'scene_change_rate': scene_change_rate,
+                    'avg_faces_per_frame': analysis_data['faces_detected'] / max(analysis_data['frames_analyzed'], 1),
+                }
+            },
             'file_name': file_name,
         }
     except Exception as e:
@@ -143,7 +164,10 @@ async def get_video_result(analysis_id: str):
         file_size=0,  # Not stored in this version
         status=stored['status'],
         uploaded_at=datetime.now(),
-        result=stored.get('result'),
+        completed_at=stored.get('completed_at'),
+        credibility_score=stored.get('credibility_score'),
+        confidence=stored.get('confidence'),
+        result_data=stored.get('result_data'),
     )
 
 

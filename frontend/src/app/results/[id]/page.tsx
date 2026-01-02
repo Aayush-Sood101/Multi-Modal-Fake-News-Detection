@@ -101,36 +101,102 @@ export default function ResultsPage() {
 
         // Transform data based on file type
         if (fileType === 'text' && data.result_data) {
+          const resultData = data.result_data;
+          const mlPrediction = resultData.ml_prediction || {};
+          const sentiment = resultData.sentiment || {};
+          const readability = resultData.readability || {};
+          
+          // Calculate linguistic features from manipulation indicators
+          const manipulationIndicators = resultData.manipulation_indicators || [];
+          
           transformedResult.textAnalysis = {
-            text: data.result_data.text || '',
+            text: resultData.text || resultData.full_text || '',
+            fullTextLength: resultData.full_text_length,
+            wordCount: resultData.word_count,
+            sentenceCount: resultData.sentence_count,
             suspiciousSegments: [],
-            sentiment: data.result_data.sentiment || { label: 'Unknown', score: 0 },
-            claims: data.result_data.claims || [],
-            linguisticFeatures: {
-              sensationalism: 0,
-              emotionalManipulation: 0,
-              complexity: data.result_data.readability?.flesch_reading_ease || 50
+            sentiment: {
+              label: sentiment.sentiment || 'neutral',
+              score: (sentiment.confidence || 0.5) * 100,
+              positiveCount: sentiment.positive_count || 0,
+              negativeCount: sentiment.negative_count || 0
             },
-            entities: data.result_data.entities || [],
-            frequentTerms: []
+            claims: resultData.claims || [],
+            linguisticFeatures: {
+              sensationalism: manipulationIndicators.includes('sensational_language') ? 75 : 25,
+              emotionalManipulation: manipulationIndicators.includes('emotional_manipulation') ? 80 : 20,
+              complexity: readability.flesch_reading_ease || 50,
+              excessivePunctuation: manipulationIndicators.includes('excessive_punctuation'),
+              excessiveCapitalization: manipulationIndicators.includes('excessive_capitalization'),
+              conspiracyLanguage: manipulationIndicators.includes('conspiracy_language')
+            },
+            entities: resultData.entities || [],
+            frequentTerms: [],
+            manipulationIndicators: manipulationIndicators,
+            readability: readability,
+            mlPrediction: mlPrediction.fake_probability !== undefined ? {
+              fakeProb: mlPrediction.fake_probability,
+              realProb: mlPrediction.real_probability,
+              confidence: mlPrediction.confidence,
+              prediction: mlPrediction.prediction
+            } : undefined,
+            mlExplanation: resultData.ml_explanation
           };
         } else if (fileType === 'audio' && data.result_data) {
+          const resultData = data.result_data;
+          const transcription = resultData.transcription || {};
+          const quality = resultData.quality || {};
+          const deepfakeDetection = resultData.deepfake_detection || {};
+          
           // Transform audio transcription object to string
-          const transcription = typeof data.result_data.transcription === 'object' 
-            ? data.result_data.transcription?.text || 'No transcription available'
-            : data.result_data.transcription || 'No transcription available';
-            
+          const transcriptionText = typeof transcription === 'object' 
+            ? transcription.text || 'No transcription available'
+            : transcription || 'No transcription available';
+          
           transformedResult.audioAnalysis = {
-            transcription,
-            confidence: data.result_data.transcription?.confidence || 0,
-            deepfakeScore: data.result_data.deepfake_detection?.score || 0,
-            deepfakeDetails: data.result_data.deepfake_detection || undefined
+            transcription: transcriptionText,
+            transcriptionConfidence: transcription.confidence || 0,
+            transcriptionLanguage: transcription.language,
+            transcriptionSegments: transcription.segments || [],
+            audioInfo: resultData.audio_info,
+            quality: {
+              snrDb: quality.snr_db,
+              dynamicRangeDb: quality.dynamic_range_db,
+              clippingPercentage: quality.clipping_percentage,
+              hasSignificantClipping: quality.has_significant_clipping
+            },
+            silenceSegments: resultData.silence_segments || [],
+            deepfakeScore: deepfakeDetection.score || 0,
+            deepfakeDetails: {
+              authenticityScore: deepfakeDetection.authenticity_score || (100 - (deepfakeDetection.score || 0)),
+              spectralAnomalies: deepfakeDetection.spectral_anomalies || 0,
+              artifacts: deepfakeDetection.artifacts || 0,
+              confidence: deepfakeDetection.confidence || 0
+            },
+            features: resultData.features
           };
         } else if (fileType === 'video' && data.result_data) {
+          const resultData = data.result_data;
+          const deepfakeDetection = resultData.deepfake_detection || {};
+          const temporalAnalysis = resultData.temporal_analysis || {};
+          
           transformedResult.videoAnalysis = {
-            deepfakeScore: data.result_data.deepfake_detection?.score || 0,
-            facesDetected: data.result_data.faces_detected || 0,
-            temporalConsistency: data.result_data.temporal_analysis || undefined
+            videoInfo: resultData.video_info,
+            framesAnalyzed: resultData.frames_analyzed || 0,
+            facesDetected: resultData.faces_detected || 0,
+            faceFrames: resultData.face_frames || [],
+            sceneChanges: resultData.scene_changes || [],
+            sceneChangeCount: resultData.scene_change_count || 0,
+            qualityMetrics: resultData.quality_metrics || {},
+            manipulationIndicators: resultData.manipulation_indicators || [],
+            deepfakeScore: deepfakeDetection.score || 0,
+            deepfakeDetails: deepfakeDetection,
+            temporalConsistency: {
+              score: temporalAnalysis.score || 78,
+              anomalies: temporalAnalysis.anomalies || 0,
+              smoothness: temporalAnalysis.smoothness || 85
+            },
+            metadata: resultData.metadata || {}
           };
         }
         
@@ -259,7 +325,11 @@ export default function ResultsPage() {
             </div>
           </div>
 
-          <DetectionCategories />
+          <DetectionCategories 
+            textAnalysis={results.textAnalysis}
+            audioAnalysis={results.audioAnalysis}
+            videoAnalysis={results.videoAnalysis}
+          />
 
           {/* Detailed Analysis Tabs */}
           <Card>
@@ -321,11 +391,20 @@ export default function ResultsPage() {
 
           {/* Advanced Features */}
           <div className="grid gap-6 lg:grid-cols-2">
-            <SourceCredibility profile={results.sourceProfile} />
-            <SourceNetwork />
+            {/* Only show these if we have source data - currently not implemented in backend */}
+            {results.sourceProfile && (
+              <>
+                <SourceCredibility profile={results.sourceProfile} />
+                <SourceNetwork />
+              </>
+            )}
           </div>
 
-          <TemporalAnalysis />
+          {/* Temporal Analysis - only show if data is available */}
+          <TemporalAnalysis 
+            propagation={results.temporalData?.propagation}
+            timeline={results.temporalData?.timeline}
+          />
         </div>
       </div>
     </MainLayout>

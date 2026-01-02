@@ -2,7 +2,7 @@
 
 import { MainLayout } from '@/components/layout';
 import { FileUpload } from '@/components/upload';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { uploadFile, UploadProgress } from '@/lib/api';
 import { Loader2, CheckCircle, XCircle, AlertTriangle, ArrowRight, Sparkles, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -25,6 +25,15 @@ export default function AnalyzePage() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadStatuses, setUploadStatuses] = useState<Record<string, UploadStatus>>({});
   const [isUploading, setIsUploading] = useState(false);
+  const pollIntervalsRef = useRef<Record<string, NodeJS.Timeout>>({});
+
+  // Cleanup polling intervals on unmount
+  useEffect(() => {
+    const currentIntervals = pollIntervalsRef.current;
+    return () => {
+      Object.values(currentIntervals).forEach(interval => clearInterval(interval));
+    };
+  }, []);
 
   const handleFilesSelected = (files: File[]) => {
     setSelectedFiles(files);
@@ -75,17 +84,63 @@ export default function AnalyzePage() {
           }
         );
 
+        // Set to processing state
         setUploadStatuses((prev) => ({
           ...prev,
           [fileId]: {
             ...prev[fileId],
-            status: 'completed',
+            status: 'processing',
             progress: 100,
-            message: result.status,
+            message: 'Analysis in progress...',
             analysisId: result.id,
             fileType: endpoint,
           },
         }));
+
+        // Poll for completion
+        const pollInterval = setInterval(async () => {
+          try {
+            const { getAnalysisResult } = await import('@/lib/api');
+            const analysisResult = await getAnalysisResult(result.id, endpoint);
+            
+            if (analysisResult.status === 'completed') {
+              clearInterval(pollInterval);
+              delete pollIntervalsRef.current[fileId];
+              setUploadStatuses((prev) => ({
+                ...prev,
+                [fileId]: {
+                  ...prev[fileId],
+                  status: 'completed',
+                  message: 'Analysis complete!',
+                },
+              }));
+            } else if (analysisResult.status === 'failed') {
+              clearInterval(pollInterval);
+              delete pollIntervalsRef.current[fileId];
+              setUploadStatuses((prev) => ({
+                ...prev,
+                [fileId]: {
+                  ...prev[fileId],
+                  status: 'error',
+                  message: 'Analysis failed',
+                },
+              }));
+            }
+          } catch (error) {
+            console.error('Polling error:', error);
+          }
+        }, 2000); // Poll every 2 seconds
+
+        // Store interval reference
+        pollIntervalsRef.current[fileId] = pollInterval;
+
+        // Cleanup after 5 minutes
+        setTimeout(() => {
+          if (pollIntervalsRef.current[fileId]) {
+            clearInterval(pollIntervalsRef.current[fileId]);
+            delete pollIntervalsRef.current[fileId];
+          }
+        }, 300000);
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Upload failed';
         setUploadStatuses((prev) => ({
@@ -189,10 +244,17 @@ export default function AnalyzePage() {
                               <p className="text-sm font-medium truncate">{status.filename}</p>
                               <div className="flex items-center gap-2 mt-1">
                                 <Badge 
-                                  variant={status.status === 'completed' ? 'default' : status.status === 'error' ? 'destructive' : 'secondary'}
+                                  variant={
+                                    status.status === 'completed' ? 'default' : 
+                                    status.status === 'error' ? 'destructive' : 
+                                    'secondary'
+                                  }
                                   className="text-xs"
                                 >
-                                  {status.status}
+                                  {status.status === 'uploading' ? 'Uploading' :
+                                   status.status === 'processing' ? 'Processing' :
+                                   status.status === 'completed' ? 'Completed' :
+                                   'Error'}
                                 </Badge>
                                 {status.message && (
                                   <span className="text-xs text-muted-foreground">{status.message}</span>

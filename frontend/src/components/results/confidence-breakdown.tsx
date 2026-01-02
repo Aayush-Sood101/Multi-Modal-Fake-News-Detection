@@ -20,19 +20,19 @@ export function ConfidenceBreakdown({ scores }: ConfidenceBreakdownProps) {
     {
       name: 'Text',
       score: scores.text || 0,
-      confidence: scores.text ? Math.min(95, scores.text + 5) : 0,
+      confidence: scores.text || 0,
       color: '#3b82f6'
     },
     {
       name: 'Audio',
       score: scores.audio || 0,
-      confidence: scores.audio ? Math.min(95, scores.audio + 7) : 0,
+      confidence: scores.audio || 0,
       color: '#8b5cf6'
     },
     {
       name: 'Video',
       score: scores.video || 0,
-      confidence: scores.video ? Math.min(95, scores.video + 6) : 0,
+      confidence: scores.video || 0,
       color: '#ec4899'
     }
   ].filter(item => item.score > 0);

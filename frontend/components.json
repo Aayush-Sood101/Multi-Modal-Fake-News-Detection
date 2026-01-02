@@ -4,13 +4,14 @@
   "rsc": true,
   "tsx": true,
   "tailwind": {
-    "config": "",
+    "config": "tailwind.config.ts", 
     "css": "src/app/globals.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
   },
   "iconLibrary": "lucide",
+  "packageManager": "npm",
   "aliases": {
     "components": "@/components",
     "utils": "@/lib/utils",

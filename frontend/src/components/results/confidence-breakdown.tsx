@@ -15,33 +15,57 @@ interface ConfidenceBreakdownProps {
 }
 
 export function ConfidenceBreakdown({ scores }: ConfidenceBreakdownProps) {
-  // Prepare data for stacked bar chart
-  const data = [
-    {
-      name: 'Text',
-      score: scores.text || 0,
-      confidence: scores.text || 0,
-      color: '#3b82f6'
-    },
-    {
-      name: 'Audio',
-      score: scores.audio || 0,
-      confidence: scores.audio || 0,
-      color: '#8b5cf6'
-    },
-    {
-      name: 'Video',
-      score: scores.video || 0,
-      confidence: scores.video || 0,
-      color: '#ec4899'
+  // Prepare data for bar chart with validation
+  const prepareModalityData = () => {
+    const modalities = [];
+    
+    if (scores.text !== undefined && scores.text > 0) {
+      modalities.push({
+        name: 'Text Analysis',
+        score: Math.round(scores.text),
+        color: '#3b82f6',
+        label: 'Text'
+      });
     }
-  ].filter(item => item.score > 0);
+    
+    if (scores.audio !== undefined && scores.audio > 0) {
+      modalities.push({
+        name: 'Audio Analysis',
+        score: Math.round(scores.audio),
+        color: '#8b5cf6',
+        label: 'Audio'
+      });
+    }
+    
+    if (scores.video !== undefined && scores.video > 0) {
+      modalities.push({
+        name: 'Video Analysis',
+        score: Math.round(scores.video),
+        color: '#ec4899',
+        label: 'Video'
+      });
+    }
+    
+    return modalities;
+  };
+
+  const data = prepareModalityData();
 
   const overallScore = scores.overall || (
     data.length > 0 
-      ? data.reduce((acc, item) => acc + item.score, 0) / data.length 
+      ? Math.round(data.reduce((acc, item) => acc + item.score, 0) / data.length)
       : 0
   );
+
+  if (data.length === 0) {
+    return (
+      <Card className="w-full">
+        <CardContent className="pt-6">
+          <p className="text-center text-muted-foreground">No modality scores available</p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="w-full">
@@ -93,13 +117,13 @@ export function ConfidenceBreakdown({ scores }: ConfidenceBreakdownProps) {
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {data.map((item) => (
-              <div key={item.name} className="text-center p-3 rounded-lg border bg-card">
-                <div className="text-sm text-muted-foreground mb-1">{item.name}</div>
-                <div className="text-2xl font-bold" style={{ color: item.color }}>
-                  {item.score.toFixed(1)}
+              <div key={item.name} className="text-center p-3 rounded-lg border bg-card hover:bg-accent transition-colors">
+                <div className="text-sm text-muted-foreground mb-1">{item.label}</div>
+                <div className="text-3xl font-bold mb-1" style={{ color: item.color }}>
+                  {item.score}
                 </div>
-                <div className="text-xs text-muted-foreground mt-1">
-                  {item.confidence.toFixed(0)}% conf.
+                <div className="text-xs text-muted-foreground">
+                  Credibility
                 </div>
               </div>
             ))}

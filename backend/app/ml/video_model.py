@@ -67,25 +67,50 @@ class VideoDeepfakeDetector:
         suspicion_score = 0.0
         frame_scores = []
         
-        # Analyze face consistency across frames
+        # Enhanced face consistency analysis
         face_counts = [len(f.get('face_locations', [])) for f in face_data]
         if face_counts:
             face_variance = np.std(face_counts)
-            if face_variance > 1.5:  # Inconsistent face detection
+            avg_faces = np.mean(face_counts)
+            
+            # More sophisticated inconsistency detection
+            if face_variance > 2.0:
+                indicators.append("Severe face detection inconsistency")
+                suspicion_score += 0.20
+            elif face_variance > 1.5:
                 indicators.append("Inconsistent face detection across frames")
-                suspicion_score += 0.15
+                suspicion_score += 0.12
+            
+            # Check for impossible face counts
+            if avg_faces > 5:
+                indicators.append("Unusually high face count")
+                suspicion_score += 0.10
         
-        # Check for face size inconsistencies
+        # Enhanced face size analysis
         face_sizes = []
+        face_aspect_ratios = []
         for frame_data in face_data:
             for face in frame_data.get('face_locations', []):
                 w, h = face[2], face[3]
                 face_sizes.append(w * h)
+                if h > 0:
+                    face_aspect_ratios.append(w / h)
         
         if face_sizes:
             size_variance = np.std(face_sizes) / (np.mean(face_sizes) + 1e-6)
-            if size_variance > 0.5:  # High variance in face sizes
+            if size_variance > 0.7:  # High variance indicates manipulation
+                indicators.append("Severe face size variations")
+                suspicion_score += 0.18
+            elif size_variance > 0.5:
                 indicators.append("Unusual face size variations")
+                suspicion_score += 0.12
+        
+        # Check face aspect ratios for unnatural distortions
+        if face_aspect_ratios:
+            mean_ratio = np.mean(face_aspect_ratios)
+            # Natural face ratio is around 0.7-0.9
+            if mean_ratio < 0.5 or mean_ratio > 1.2:
+                indicators.append("Unnatural face aspect ratio")
                 suspicion_score += 0.15
         
         # Analyze frames for manipulation artifacts
@@ -96,35 +121,80 @@ class VideoDeepfakeDetector:
             if frame_analysis['suspicious']:
                 suspicion_score += 0.05  # Small increment per suspicious frame
         
-        # Check quality metrics
-        if quality_metrics.get('sharpness', 0) < 30:
+        # Enhanced quality metrics analysis
+        if quality_metrics.get('sharpness', 0) < 25:
+            indicators.append("Poor video sharpness (possible processing)")
+            suspicion_score += 0.12
+        
+        if quality_metrics.get('contrast', 0) < 15:
+            indicators.append("Low contrast (possible manipulation)")
+            suspicion_score += 0.10
+        
+        # Check for compression artifacts that might hide deepfake traces
+        if quality_metrics.get('compression_artifacts', 0) > 0.7:
+            indicators.append("High compression artifacts")
+            suspicion_score += 0.08
+        
+        # Check for edge blending artifacts (common in face swaps)
+        edge_inconsistency = quality_metrics.get('edge_inconsistency', 0)
+        if edge_inconsistency > 0.6:
+            indicators.append("Edge blending artifacts detected")
+            suspicion_score += 0.20
+        elif edge_inconsistency > 0.4:
+            indicators.append("Minor edge inconsistencies")
+            suspicion_score += 0.10
+        
+        # Analyze scene changes for unnatural transitions
+        scene_changes = quality_metrics.get('scene_changes', 0)
+        total_frames = len(frames)
+        if total_frames > 0:
+            change_rate = scene_changes / total_frames
+            if change_rate > 0.3:  # Too many scene changes
+                indicators.append("Excessive scene changes")
+                suspicion_score += 0.08
+        
+        # Check lighting consistency across frames
+        if 'lighting_consistency' in quality_metrics:
+            lighting = quality_metrics['lighting_consistency']
+            if lighting < 0.6:
+                indicators.append("Inconsistent lighting across frames")
+                suspicion_score += 0.15
+        
+        # Check for noise and additional quality issues
+        if quality_metrics.get('sharpness', 0) < 20:
             indicators.append("Very low video sharpness")
-            suspicion_score += 0.1
+            suspicion_score += 0.15
         
         if quality_metrics.get('noise', 0) > 20:
             indicators.append("High noise level")
-            suspicion_score += 0.1
+            suspicion_score += 0.10
         
-        # Check for unnatural lighting consistency
+        # Enhanced lighting consistency check
         brightness_values = [frame_scores[i].get('brightness', 128) 
                             for i in range(len(frame_scores))]
         if len(brightness_values) > 1:
             brightness_std = np.std(brightness_values)
-            if brightness_std < 2:  # Too consistent
+            if brightness_std < 2:  # Too consistent (unnatural)
                 indicators.append("Unnaturally consistent lighting")
-                suspicion_score += 0.1
+                suspicion_score += 0.12
+            elif brightness_std > 80:  # Too varied
+                indicators.append("Erratic lighting changes")
+                suspicion_score += 0.10
         
-        # Check for edge artifacts around faces
+        # Enhanced edge artifact detection around faces
         edge_artifacts = sum(1 for fs in frame_scores if fs.get('edge_artifacts', False))
-        if edge_artifacts > len(frames) * 0.3:  # More than 30% of frames
+        if len(frames) > 0 and edge_artifacts > len(frames) * 0.3:
             indicators.append("Edge artifacts detected around faces")
-            suspicion_score += 0.2
+            suspicion_score += 0.20
         
-        # Calculate final scores
+        # Normalize suspicion score
         suspicion_score = min(suspicion_score, 1.0)
-        authenticity_score = (1 - suspicion_score) * 100
-        confidence = 0.60 + (len(indicators) * 0.05)
-        confidence = min(confidence, 0.90)
+        authenticity_score = max(0, (1 - suspicion_score) * 100)
+        
+        # Improved confidence calculation
+        base_confidence = 0.55
+        indicator_confidence = len(indicators) * 0.05
+        confidence = min(base_confidence + indicator_confidence, 0.88)
         
         return {
             'is_deepfake': suspicion_score > 0.5,

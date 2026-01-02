@@ -136,13 +136,33 @@ class MultiModalFusionEngine:
         if text_result.get('ml_prediction'):
             ml = text_result['ml_prediction']
             # Convert fake probability to credibility
-            credibility = (1 - ml.get('fake_probability', 0.5)) * 100
+            fake_prob = ml.get('fake_probability', 0.5)
+            credibility = (1 - fake_prob) * 100
             confidence = ml.get('confidence', 0.5)
+            
+            # Adjust confidence based on text features
+            features = ml.get('features', {})
+            if features.get('clickbait_indicators', 0) > 3:
+                confidence = min(confidence + 0.1, 0.95)
+            if features.get('credibility_markers', 0) > 2:
+                credibility = min(credibility + 5, 100)
         else:
             # Fallback to manipulation-based score
             manipulation_count = len(text_result.get('manipulation_indicators', []))
-            credibility = max(10, 100 - (manipulation_count * 15))
-            confidence = 0.6
+            sentiment = text_result.get('sentiment_analysis', {})
+            
+            # More sophisticated scoring
+            base_credibility = 65
+            manipulation_penalty = manipulation_count * 12
+            
+            # Adjust for extreme sentiment (often indicates bias)
+            if sentiment:
+                compound = abs(sentiment.get('compound', 0))
+                if compound > 0.8:
+                    manipulation_penalty += 8
+            
+            credibility = max(10, base_credibility - manipulation_penalty)
+            confidence = 0.55 + min(manipulation_count * 0.05, 0.25)
         
         return {
             'score': credibility,
@@ -151,12 +171,18 @@ class MultiModalFusionEngine:
         }
     
     def _extract_audio_score(self, audio_result: Dict[str, Any]) -> Dict[str, float]:
-        """Extract authenticity score and confidence from audio analysis"""
+        """Extract authenticity score and confidence from audio analysis with improvements"""
         # Check for deepfake detection result
         if audio_result.get('deepfake_detection'):
             df = audio_result['deepfake_detection']
             authenticity = df.get('authenticity_score', 50)
             confidence = df.get('confidence', 0.5)
+            
+            # Boost confidence for severe indicators
+            indicators = df.get('indicators', [])
+            severe_count = sum(1 for i in indicators if 'severe' in i.lower() or 'extreme' in i.lower())
+            if severe_count > 0:
+                confidence = min(confidence + (severe_count * 0.08), 0.92)
         else:
             # Fallback to quality-based score
             quality = audio_result.get('quality', {})
@@ -167,6 +193,8 @@ class MultiModalFusionEngine:
             authenticity = 70.0
             if snr < 15:
                 authenticity -= 15
+            if snr > 50:  # Too clean
+                authenticity -= 10
             if clipping > 1.0:
                 authenticity -= 10
             
@@ -179,12 +207,22 @@ class MultiModalFusionEngine:
         }
     
     def _extract_video_score(self, video_result: Dict[str, Any]) -> Dict[str, float]:
-        """Extract authenticity score and confidence from video analysis"""
+        """Extract authenticity score and confidence from video analysis with improvements"""
         # Check for deepfake detection result
         if video_result.get('deepfake_detection'):
             df = video_result['deepfake_detection']
             authenticity = df.get('authenticity_score', 50)
             confidence = df.get('confidence', 0.5)
+            
+            # Enhance confidence based on indicators
+            indicators = df.get('indicators', [])
+            severe_count = sum(1 for i in indicators if 'severe' in i.lower() or 'extreme' in i.lower())
+            edge_artifacts = sum(1 for i in indicators if 'edge' in i.lower())
+            
+            if severe_count > 0:
+                confidence = min(confidence + (severe_count * 0.07), 0.88)
+            if edge_artifacts > 0:
+                confidence = min(confidence + 0.10, 0.90)
         else:
             # Fallback to quality/scene-based score
             quality = video_result.get('quality_metrics', {})
@@ -210,7 +248,7 @@ class MultiModalFusionEngine:
         self,
         modalities: Dict[ModalityType, Dict[str, float]]
     ) -> Tuple[float, float]:
-        """Weighted average fusion strategy"""
+        """Enhanced weighted average fusion with cross-modal consistency"""
         # Normalize weights for available modalities
         available_weight_sum = sum(
             m['weight'] for m in modalities.values()
@@ -227,6 +265,19 @@ class MultiModalFusionEngine:
             (m['confidence'] * m['weight']) / available_weight_sum
             for m in modalities.values()
         )
+        
+        # Cross-modal consistency bonus
+        if len(modalities) > 1:
+            scores = [m['score'] for m in modalities.values()]
+            score_std = np.std(scores)
+            
+            # If all modalities agree (low std), boost confidence
+            if score_std < 15:
+                consistency_bonus = 0.10
+                weighted_confidence = min(weighted_confidence + consistency_bonus, 0.95)
+            elif score_std > 35:
+                # High disagreement - reduce confidence
+                weighted_confidence = max(weighted_confidence - 0.10, 0.35)
         
         return weighted_score, weighted_confidence
     

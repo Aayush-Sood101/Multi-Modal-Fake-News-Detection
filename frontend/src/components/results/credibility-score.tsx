@@ -11,20 +11,24 @@ interface CredibilityScoreProps {
 }
 
 export function CredibilityScore({ score, confidence = 85 }: CredibilityScoreProps) {
+  // Ensure score is within valid range
+  const validScore = Math.max(0, Math.min(100, score || 0));
+  const validConfidence = Math.max(0, Math.min(100, confidence || 0));
+  
   // Determine credibility level and color
   const getScoreLevel = (score: number) => {
-    if (score >= 70) return { label: 'Credible', color: '#22c55e', icon: CheckCircle };
-    if (score >= 40) return { label: 'Uncertain', color: '#eab308', icon: AlertTriangle };
-    return { label: 'Not Credible', color: '#ef4444', icon: XCircle };
+    if (score >= 70) return { label: 'Credible', color: '#22c55e', icon: CheckCircle, bgColor: 'bg-green-50', borderColor: 'border-green-200' };
+    if (score >= 40) return { label: 'Uncertain', color: '#eab308', icon: AlertTriangle, bgColor: 'bg-yellow-50', borderColor: 'border-yellow-200' };
+    return { label: 'Not Credible', color: '#ef4444', icon: XCircle, bgColor: 'bg-red-50', borderColor: 'border-red-200' };
   };
 
-  const level = getScoreLevel(score);
+  const level = getScoreLevel(validScore);
   const Icon = level.icon;
 
-  // Data for the gauge chart
+  // Data for the gauge chart (ensure no negative values)
   const data = [
-    { name: 'Score', value: score },
-    { name: 'Remaining', value: 100 - score }
+    { name: 'Score', value: validScore },
+    { name: 'Remaining', value: Math.max(0, 100 - validScore) }
   ];
 
   return (
@@ -59,22 +63,58 @@ export function CredibilityScore({ score, confidence = 85 }: CredibilityScorePro
                   <Cell fill={level.color} />
                   <Cell fill="#e5e7eb" />
                   <Label
-                    value={score.toFixed(0)}
-                    position="center"
-                    className="text-6xl font-bold"
-                    fill="currentColor"
+                    content={({ viewBox }) => {
+                      if (viewBox && "cx" in viewBox && "cy" in viewBox) {
+                        return (
+                          <text
+                            x={viewBox.cx}
+                            y={viewBox.cy}
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                          >
+                            <tspan
+                              x={viewBox.cx}
+                              y={(viewBox.cy || 0) - 10}
+                              className="fill-foreground text-4xl font-bold"
+                            >
+                              {validScore}
+                            </tspan>
+                            <tspan
+                              x={viewBox.cx}
+                              y={(viewBox.cy || 0) + 20}
+                              className="fill-muted-foreground text-sm"
+                            >
+                              out of 100
+                            </tspan>
+                          </text>
+                        )
+                      }
+                    }}
                   />
                 </Pie>
               </PieChart>
             </ResponsiveContainer>
-            <div className="absolute inset-x-0 bottom-0 text-center pb-8">
-              <div className="flex items-center justify-center gap-2">
-                <Icon className="h-5 w-5" style={{ color: level.color }} />
-                <span className="text-sm font-medium text-muted-foreground">
-                  {confidence}% Confidence
-                </span>
-              </div>
+          </div>
+
+          <div className="flex items-center gap-3 text-center">
+            <Icon className="w-8 h-8" style={{ color: level.color }} />
+            <div>
+              <p className="text-2xl font-bold" style={{ color: level.color }}>
+                {level.label}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                Confidence: {validConfidence}%
+              </p>
             </div>
+          </div>
+
+          {/* Score interpretation */}
+          <div className={`w-full p-4 rounded-lg border ${level.borderColor} ${level.bgColor}`}>
+            <p className="text-sm text-center">
+              {validScore >= 70 && "This content shows strong indicators of credibility and authenticity."}
+              {validScore >= 40 && validScore < 70 && "This content has mixed signals. Additional verification recommended."}
+              {validScore < 40 && "This content shows multiple indicators of misinformation or manipulation."}
+            </p>
           </div>
 
           <div className="w-full grid grid-cols-3 gap-4 text-center pt-4 border-t">

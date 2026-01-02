@@ -167,21 +167,27 @@ class AudioDeepfakeDetector:
         indicators = []
         suspicion_score = 0.0
         
-        # Check for unnatural spectral patterns
+        # Enhanced spectral analysis for synthetic voice detection
         if 'spectral_centroid_mean' in audio_features:
             centroid = audio_features['spectral_centroid_mean']
-            # Human speech typically 500-2000 Hz
-            if centroid < 300 or centroid > 3000:
+            # Human speech typically 500-2000 Hz; AI voices often have anomalies
+            if centroid < 250 or centroid > 3500:
+                indicators.append("Extreme spectral centroid anomaly")
+                suspicion_score += 0.20
+            elif centroid < 300 or centroid > 3000:
                 indicators.append("Unusual spectral centroid")
-                suspicion_score += 0.15
+                suspicion_score += 0.12
         
-        # Check for unnatural zero-crossing rate
+        # Enhanced zero-crossing rate analysis
         if 'zero_crossing_rate_mean' in audio_features:
             zcr = audio_features['zero_crossing_rate_mean']
-            # Natural speech: 0.01 - 0.2
-            if zcr < 0.005 or zcr > 0.3:
+            # Natural speech: 0.01 - 0.2; AI synthesis often deviates
+            if zcr < 0.003 or zcr > 0.4:
+                indicators.append("Severe zero-crossing rate anomaly")
+                suspicion_score += 0.18
+            elif zcr < 0.005 or zcr > 0.3:
                 indicators.append("Unusual zero-crossing rate")
-                suspicion_score += 0.15
+                suspicion_score += 0.10
         
         # Check for audio artifacts
         if 'clipping_detected' in audio_quality:
@@ -189,35 +195,58 @@ class AudioDeepfakeDetector:
                 indicators.append("Audio clipping detected")
                 suspicion_score += 0.1
         
-        # Check SNR (signal-to-noise ratio)
+        # Enhanced SNR analysis
         if 'snr_db' in audio_quality:
             snr = audio_quality['snr_db']
-            if snr < 10:  # Very low SNR
-                indicators.append("Low signal-to-noise ratio")
-                suspicion_score += 0.1
-            elif snr > 50:  # Unrealistically high SNR
-                indicators.append("Unrealistically high SNR")
+            if snr < 8:  # Very low SNR
+                indicators.append("Very low signal-to-noise ratio")
                 suspicion_score += 0.15
+            elif snr < 10:
+                indicators.append("Low signal-to-noise ratio")
+                suspicion_score += 0.08
+            elif snr > 55:  # Unrealistically high SNR (too clean)
+                indicators.append("Unrealistically high SNR (possibly synthetic)")
+                suspicion_score += 0.18
+            elif snr > 50:
+                indicators.append("Unusually high SNR")
+                suspicion_score += 0.12
         
-        # Check for unnatural MFCC patterns
+        # Enhanced MFCC analysis for voice authenticity
         if 'mfcc_std' in audio_features:
             mfcc_std = audio_features['mfcc_std']
-            # Very low variance might indicate synthesis
-            if mfcc_std < 5:
+            # Very low variance indicates lack of natural voice variation
+            if mfcc_std < 3:
+                indicators.append("Extremely low MFCC variance (synthetic indicator)")
+                suspicion_score += 0.20
+            elif mfcc_std < 5:
                 indicators.append("Low MFCC variance")
+                suspicion_score += 0.12
+        
+        # Check formant frequencies if available
+        if 'formant_consistency' in audio_features:
+            consistency = audio_features['formant_consistency']
+            if consistency < 0.6:
+                indicators.append("Poor formant consistency")
                 suspicion_score += 0.15
         
         # Check dynamic range
         if 'dynamic_range_db' in audio_quality:
             dr = audio_quality['dynamic_range_db']
-            if dr < 10:  # Compressed/processed
+            if dr < 8:  # Heavily compressed/processed
+                indicators.append("Very low dynamic range")
+                suspicion_score += 0.12
+            elif dr < 10:
                 indicators.append("Low dynamic range")
-                suspicion_score += 0.1
+                suspicion_score += 0.08
         
-        # Calculate final scores
+        # Calculate final scores with better calibration
         suspicion_score = min(suspicion_score, 1.0)
         authenticity_score = (1 - suspicion_score) * 100
-        confidence = 0.65 + (len(indicators) * 0.05)  # More indicators = higher confidence
+        
+        # Improved confidence based on number and severity of indicators
+        base_confidence = 0.60
+        indicator_confidence = len(indicators) * 0.06
+        confidence = min(base_confidence + indicator_confidence, 0.90)
         confidence = min(confidence, 0.95)
         
         return {

@@ -141,38 +141,83 @@ class TextFakeNewsDetector:
             return self._fallback_prediction(text)
     
     def _fallback_prediction(self, text: str) -> Dict[str, Any]:
-        """Fallback rule-based prediction when ML model unavailable"""
-        # Simple heuristic-based detection
+        """Enhanced rule-based prediction when ML model unavailable"""
         text_lower = text.lower()
         
-        # Suspicious indicators
-        suspicious_words = [
-            'breaking', 'shocking', 'unbelievable', 'must read',
-            'they don\'t want you to know', 'secret', 'exposed',
-            'miracle', 'instant', 'guaranteed', '100%'
+        # Expanded suspicious indicators with weights
+        clickbait_phrases = [
+            'you won\'t believe', 'shocking truth', 'doctors hate', 
+            'one weird trick', 'what happened next', 'mind blowing',
+            'this is why', 'the real reason', 'they don\'t want'
         ]
         
-        credibility_words = [
-            'study', 'research', 'according to', 'expert',
-            'professor', 'university', 'published', 'data'
+        emotional_manipulation = [
+            'outrageous', 'devastating', 'terrifying', 'horrifying',
+            'amazing', 'incredible', 'unbelievable', 'miracle',
+            'scandal', 'exposed', 'revealed', 'conspiracy'
         ]
         
-        suspicious_count = sum(1 for word in suspicious_words if word in text_lower)
-        credibility_count = sum(1 for word in credibility_words if word in text_lower)
+        urgency_words = [
+            'breaking', 'urgent', 'alert', 'warning', 'must read',
+            'immediately', 'right now', 'before it\'s too late',
+            'limited time', 'act now', 'don\'t miss'
+        ]
         
-        # Calculate score
-        fake_score = (suspicious_count * 0.15) - (credibility_count * 0.1) + 0.5
-        fake_prob = min(max(fake_score, 0.2), 0.8)  # Keep in reasonable range
+        credibility_indicators = [
+            'study shows', 'research indicates', 'according to',
+            'expert', 'professor', 'dr.', 'ph.d.', 'university',
+            'institute', 'published', 'journal', 'peer-reviewed',
+            'data shows', 'statistics', 'evidence', 'analysis'
+        ]
+        
+        source_citations = [
+            'source:', 'via', 'according to', 'reported by',
+            'published in', 'study by', 'cited in'
+        ]
+        
+        # Count indicators
+        clickbait_count = sum(1 for phrase in clickbait_phrases if phrase in text_lower)
+        emotional_count = sum(1 for word in emotional_manipulation if word in text_lower)
+        urgency_count = sum(1 for word in urgency_words if word in text_lower)
+        credibility_count = sum(1 for phrase in credibility_indicators if phrase in text_lower)
+        citation_count = sum(1 for phrase in source_citations if phrase in text_lower)
+        
+        # Additional heuristics
+        has_all_caps = any(word.isupper() and len(word) > 3 for word in text.split())
+        excessive_punctuation = text.count('!') > 3 or text.count('?') > 3
+        short_text = len(text.split()) < 20
+        
+        # Calculate weighted fake score
+        fake_score = 0.3  # Base score
+        fake_score += clickbait_count * 0.12
+        fake_score += emotional_count * 0.08
+        fake_score += urgency_count * 0.10
+        fake_score -= credibility_count * 0.08
+        fake_score -= citation_count * 0.06
+        fake_score += 0.05 if has_all_caps else 0
+        fake_score += 0.05 if excessive_punctuation else 0
+        fake_score += 0.03 if short_text else 0
+        
+        fake_prob = min(max(fake_score, 0.15), 0.85)
+        
+        # Calculate confidence based on indicator strength
+        indicator_strength = clickbait_count + emotional_count + urgency_count + credibility_count
+        confidence = min(0.35 + (indicator_strength * 0.04), 0.65)
         
         return {
             'is_fake': fake_prob > 0.5,
-            'confidence': 0.4,  # Lower confidence for rule-based
+            'confidence': confidence,
             'fake_probability': fake_prob,
             'real_probability': 1 - fake_prob,
             'features': {
-                'suspicious_word_count': suspicious_count,
-                'credibility_word_count': credibility_count,
-                'model_used': 'rule-based-fallback'
+                'clickbait_indicators': clickbait_count,
+                'emotional_manipulation': emotional_count,
+                'urgency_tactics': urgency_count,
+                'credibility_markers': credibility_count,
+                'source_citations': citation_count,
+                'has_all_caps': has_all_caps,
+                'excessive_punctuation': excessive_punctuation,
+                'model_used': 'enhanced-rule-based'
             }
         }
     

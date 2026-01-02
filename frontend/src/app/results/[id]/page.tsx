@@ -45,6 +45,20 @@ interface AnalysisResult {
   audioAnalysis?: Record<string, unknown>;
   videoAnalysis?: Record<string, unknown>;
   sourceProfile?: Record<string, unknown>;
+  temporalData?: {
+    propagation?: Array<{
+      date: string;
+      mentions: number;
+      shares: number;
+      credibilityScore: number;
+    }>;
+    timeline?: Array<{
+      claim: string;
+      firstAppearance: string;
+      peakPropagation: string;
+      currentStatus: 'spreading' | 'declining' | 'debunked' | 'verified';
+    }>;
+  };
   timestamp: string;
 }
 

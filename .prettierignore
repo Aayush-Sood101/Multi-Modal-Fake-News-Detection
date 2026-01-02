@@ -1,0 +1,15 @@
+node_modules
+.next
+dist
+build
+coverage
+*.pyc
+__pycache__
+.pytest_cache
+.venv
+venv
+*.egg-info
+.docker
+docker-compose.yml
+pnpm-lock.yaml
+package-lock.json
